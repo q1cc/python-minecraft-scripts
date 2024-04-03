@@ -34,8 +34,8 @@ def forge_server_installer_url(minecraft_version, forge_version):
 def forge_server_installer_name(minecraft_version, forge_version):
     return f'forge-{minecraft_version}-{forge_version}-installer.jar'
 
-def forge_server_jar_name(minecraft_version, loader_version, launcher_version):
-    return f'forge-server-mc.{minecraft_version}-loader.{loader_version}-launcher.{launcher_version}.jar'
+def forge_server_jar_name(minecraft_version, forge_version):
+    return f'forge-{minecraft_version}-{forge_version}.jar'
 
 def java_args_for_memory(memory_mibs: int) -> list[str]:
     # See https://www.oracle.com/java/technologies/javase/vmoptions-jsp.html
