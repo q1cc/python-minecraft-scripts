@@ -27,6 +27,15 @@ def fabric_server_url(minecraft_version, loader_version, launcher_version):
 def fabric_server_jar_name(minecraft_version, loader_version, launcher_version):
     return f'fabric-server-mc.{minecraft_version}-loader.{loader_version}-launcher.{launcher_version}.jar'
 
+def forge_server_installer_url(minecraft_version, forge_version):
+    #return f'https://maven.minecraftforge.net/net/minecraftforge/forge/{minecraft_version}-{forge_version}/forge-{minecraft_version}-{forge_version}-universal.jar'
+    return f'https://maven.minecraftforge.net/net/minecraftforge/forge/{minecraft_version}-{forge_version}/forge-{minecraft_version}-{forge_version}-installer.jar'
+
+def forge_server_installer_name(minecraft_version, forge_version):
+    return f'forge-{minecraft_version}-{forge_version}-installer.jar'
+
+def forge_server_jar_name(minecraft_version, loader_version, launcher_version):
+    return f'forge-server-mc.{minecraft_version}-loader.{loader_version}-launcher.{launcher_version}.jar'
 
 def java_args_for_memory(memory_mibs: int) -> list[str]:
     # See https://www.oracle.com/java/technologies/javase/vmoptions-jsp.html
@@ -164,17 +173,51 @@ class MinecraftServerWrapper:
 
     def download_launcher(self):
         minecraft_version = self._config['minecraft']['version']
-        fabric_loader_version = self._config['minecraft']['fabric']['loader-version']
-        fabric_launcher_version = self._config['minecraft']['fabric']['launcher-version']
-        if self._current_jar_path is None:
-            self._current_jar_path = self._working_dir + '/' + fabric_server_jar_name(minecraft_version, fabric_loader_version, fabric_launcher_version)
+        fabric = self._config['minecraft']['fabric']
+        forge = self._config['minecraft']['forge']
+        if fabric is not None:
+            fabric_loader_version = fabric['loader-version']
+            fabric_launcher_version = fabric['launcher-version']
+            if self._current_jar_path is None:
+                self._current_jar_path = self._working_dir + '/' + fabric_server_jar_name(minecraft_version, fabric_loader_version, fabric_launcher_version)
+        elif forge is not None:
+            forge_version = forge['version']
+            if self._current_jar_path is None:
+                self._current_jar_path = self._working_dir + '/' + forge_server_jar_name(minecraft_version, forge_version)
+        else:
+            raise MinecraftServerWrapperException(f'Either fabric or forge must be specified in config.');
+
         if os.path.exists(self._current_jar_path):
             logger.info('Launcher jar already exists, skipping download.')
         else:
-            logger.info('Downloading launcher jar...')
-            r = os.system(f'wget -O "{self._current_jar_path}" "{fabric_server_url(minecraft_version, fabric_loader_version, fabric_launcher_version)}"')
-            if r != 0:
-                raise MinecraftServerWrapperException(f'Failed to download launcher jar (wget returned non-zero exit code: {r}).')
+            if fabric is not None:
+                logger.info('Downloading forge launcher jar...')
+                download_url = fabric_server_url(minecraft_version, fabric_loader_version, fabric_launcher_version)
+                r = os.system(f'wget -O "{self._current_jar_path}" "{download_url}"')
+                if r != 0:
+                    raise MinecraftServerWrapperException(f'Failed to download launcher jar (wget returned non-zero exit code: {r}).')
+            elif forge is not None:
+                logger.info('Downloading forge installer jar...')
+                download_url = forge_server_installer_url(minecraft_version, forge_version)
+                installer_name = forge_server_installer_name(minecraft_version, forge_version)
+                r = os.system(f'wget -O "{installer_name}" "{download_url}"')
+                if r != 0:
+                    raise MinecraftServerWrapperException(f'Failed to download installer jar (wget returned non-zero exit code: {r}).')
+                if not os.path.exists(installer_name):
+                    raise MinecraftServerWrapperException(f'Failed to download installer jar: File {installer_name} does not exist.')
+                commandline = [self._java_executable_path] \
+                              + java_args_for_memory(int(self._config.wrapper['java-args']['optimize-for-memory-mibs'])) \
+                              + ['-jar', installer_name, '--installServer']
+                logger.info('Installing forge with the following command line:')
+                for arg in commandline:
+                    logger.info('    {:s}'.format(arg))
+                self._minecraft = Process(
+                    commandline=commandline,
+                    working_dir=self._working_dir,
+                    stdout_callback=self.handle_minecraft_server_output,
+                    stderr_callback=self.handle_minecraft_server_stderr,
+                    exit_callback=self.handle_minecraft_server_stop,
+                )
             # Check if download was successful
             if not os.path.exists(self._current_jar_path):
                 raise MinecraftServerWrapperException(f'Failed to download launcher jar: File {self._current_jar_path} does not exist.')
