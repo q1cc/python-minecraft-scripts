@@ -237,8 +237,8 @@ class MinecraftServerWrapper:
                 + ['-jar', self._current_launcher_path, 'nogui']
         elif type == 'forge':
             commandline = [self._java_executable_path] \
-                + [ '@'+self._current_launcher_path ] \
-                + java_args_for_memory(int(self._config.wrapper['java-args']['optimize-for-memory-mibs']))
+                + java_args_for_memory(int(self._config.wrapper['java-args']['optimize-for-memory-mibs'])) \
+                + [ '@'+self._current_launcher_path ]
         else:
             raise MinecraftServerWrapperException(f'Either fabric or forge must be specified in config.')
         logger.info('Starting Minecraft server with the following command line:')
