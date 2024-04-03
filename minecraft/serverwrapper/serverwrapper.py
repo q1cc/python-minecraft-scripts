@@ -35,8 +35,8 @@ def forge_server_installer_url(minecraft_version, forge_version):
 def forge_server_installer_name(minecraft_version, forge_version):
     return f'forge-{minecraft_version}-{forge_version}-installer.jar'
 
-def forge_server_jar_name(minecraft_version, forge_version):
-    return f'forge-{minecraft_version}-{forge_version}.jar'
+def forge_server_run_script(minecraft_version, forge_version):
+    return f'run.sh'
 
 def java_args_for_memory(memory_mibs: int) -> list[str]:
     # See https://www.oracle.com/java/technologies/javase/vmoptions-jsp.html
@@ -63,7 +63,7 @@ class MinecraftServerWrapper:
     _config: ConfigDict = None
     _serverloop: ServerLoop = None
     _working_dir: str = None
-    _current_jar_path: str = None
+    _current_launcher_path: str = None
     _minecraft: Process = None
     _wo_tick: RepeatedCallback = None
     _wo_terminal_stdin: OutputBuffer = None
@@ -177,28 +177,30 @@ class MinecraftServerWrapper:
         type = self._config['minecraft']['type']
         fabric = self._config['minecraft']['fabric']
         forge = self._config['minecraft']['forge']
+
         if type == 'fabric':
             fabric_loader_version = fabric['loader-version']
             fabric_launcher_version = fabric['launcher-version']
-            if self._current_jar_path is None:
-                self._current_jar_path = self._working_dir + '/' + fabric_server_jar_name(minecraft_version, fabric_loader_version, fabric_launcher_version)
-        elif type == 'forge':
-            forge_version = forge['version']
-            if self._current_jar_path is None:
-                self._current_jar_path = self._working_dir + '/' + forge_server_jar_name(minecraft_version, forge_version)
-        else:
-            raise MinecraftServerWrapperException(f'Either fabric or forge must be specified in config.');
+            if self._current_launcher_path is None:
+                self._current_launcher_path = self._working_dir + '/' + fabric_server_jar_name(minecraft_version, fabric_loader_version, fabric_launcher_version)
 
-        if os.path.exists(self._current_jar_path):
-            logger.info('Launcher jar already exists, skipping download.')
-        else:
-            if type == 'fabric':
+            if os.path.exists(self._current_launcher_path):
+                logger.info('Launcher jar already exists, skipping download.')
+            else:
                 logger.info('Downloading fabric launcher jar...')
                 download_url = fabric_server_url(minecraft_version, fabric_loader_version, fabric_launcher_version)
-                r = os.system(f'wget -O "{self._current_jar_path}" "{download_url}"')
+                r = os.system(f'wget -O "{self._current_launcher_path}" "{download_url}"')
                 if r != 0:
                     raise MinecraftServerWrapperException(f'Failed to download launcher jar (wget returned non-zero exit code: {r}).')
-            elif type == 'forge':
+
+        elif type == 'forge':
+            forge_version = forge['version']
+            if self._current_launcher_path is None:
+                self._current_launcher_path = self._working_dir + '/' + forge_server_run_script(minecraft_version, forge_version)
+
+            if os.path.exists(self._current_launcher_path):
+                logger.info('Launcher jar already exists, skipping download.')
+            else:
                 logger.info('Downloading forge installer jar...')
                 download_url = forge_server_installer_url(minecraft_version, forge_version)
                 installer_name = forge_server_installer_name(minecraft_version, forge_version)
@@ -219,16 +221,24 @@ class MinecraftServerWrapper:
                 os.chdir( oldpath )
                 if r != 0:
                     raise MinecraftServerWrapperException(f'Failed to run installer (returned non-zero exit code: {r}).')
+        else:
+            raise MinecraftServerWrapperException(f'Either fabric or forge must be specified in config.');
 
-            # Check if download was successful
-            if not os.path.exists(self._current_jar_path):
-                raise MinecraftServerWrapperException(f'Failed to download launcher jar: File {self._current_jar_path} does not exist.')
+        # Check if download was successful
+        if not os.path.exists(self._current_launcher_path):
+            raise MinecraftServerWrapperException(f'Failed to download launcher jar: File {self._current_launcher_path} does not exist.')
 
     def start_minecraft_server(self):
-        # commandline = ['cat']
-        commandline = [self._java_executable_path] \
-            + java_args_for_memory(int(self._config.wrapper['java-args']['optimize-for-memory-mibs'])) \
-            + ['-jar', self._current_jar_path, 'nogui']
+        commandline = None
+        if type == 'fabric':
+            commandline = [self._java_executable_path] \
+                + java_args_for_memory(int(self._config.wrapper['java-args']['optimize-for-memory-mibs'])) \
+                + ['-jar', self._current_launcher_path, 'nogui']
+        elif type == 'forge':
+            commandline = [self._current_launcher_path] \
+                          + java_args_for_memory(int(self._config.wrapper['java-args']['optimize-for-memory-mibs']))
+        else:
+            raise MinecraftServerWrapperException(f'Either fabric or forge must be specified in config.');
         logger.info('Starting Minecraft server with the following command line:')
         for arg in commandline:
             logger.info('    {:s}'.format(arg))
