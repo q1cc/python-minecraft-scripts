@@ -35,8 +35,8 @@ def forge_server_installer_url(minecraft_version, forge_version):
 def forge_server_installer_name(minecraft_version, forge_version):
     return f'forge-{minecraft_version}-{forge_version}-installer.jar'
 
-def forge_server_run_script(minecraft_version, forge_version):
-    return f'run.sh'
+def forge_server_java_args_file(minecraft_version, forge_version):
+    return f'libraries/net/minecraftforge/forge/1.20.1-47.2.21/unix_args.txt'
 
 def java_args_for_memory(memory_mibs: int) -> list[str]:
     # See https://www.oracle.com/java/technologies/javase/vmoptions-jsp.html
@@ -196,7 +196,7 @@ class MinecraftServerWrapper:
         elif type == 'forge':
             forge_version = forge['version']
             if self._current_launcher_path is None:
-                self._current_launcher_path = self._working_dir + '/' + forge_server_run_script(minecraft_version, forge_version)
+                self._current_launcher_path = self._working_dir + '/' + forge_server_java_args_file(minecraft_version, forge_version)
 
             if os.path.exists(self._current_launcher_path):
                 logger.info('Launcher jar already exists, skipping download.')
@@ -235,7 +235,8 @@ class MinecraftServerWrapper:
                 + java_args_for_memory(int(self._config.wrapper['java-args']['optimize-for-memory-mibs'])) \
                 + ['-jar', self._current_launcher_path, 'nogui']
         elif type == 'forge':
-            commandline = [self._current_launcher_path] \
+            commandline = [self._java_executable_path] \
+                          + [ '@'+self._current_launcher_path ] \
                           + java_args_for_memory(int(self._config.wrapper['java-args']['optimize-for-memory-mibs']))
         else:
             raise MinecraftServerWrapperException(f'Either fabric or forge must be specified in config.');
