@@ -14,6 +14,7 @@ from minecraft.serverwrapper.serverloop.process import Process
 from minecraft.serverwrapper.serverloop.serverloop import RepeatedCallback, ServerLoop
 from minecraft.serverwrapper.util.archive import copy_mod_from_zip, deepsearch_for_mods_dir
 from minecraft.serverwrapper.util.exceptions import MinecraftServerWrapperException
+import subprocess
 
 logger = logging.getLogger(__name__)
 
@@ -201,24 +202,24 @@ class MinecraftServerWrapper:
                 logger.info('Downloading forge installer jar...')
                 download_url = forge_server_installer_url(minecraft_version, forge_version)
                 installer_name = forge_server_installer_name(minecraft_version, forge_version)
-                r = os.system(f'wget -O "{installer_name}" "{download_url}"')
+                installer_path = self._working_dir + '/' + installer_name
+                r = os.system(f'wget -O "{installer_path}" "{download_url}"')
                 if r != 0:
                     raise MinecraftServerWrapperException(f'Failed to download installer jar (wget returned non-zero exit code: {r}).')
-                if not os.path.exists(installer_name):
-                    raise MinecraftServerWrapperException(f'Failed to download installer jar: File {installer_name} does not exist.')
-                commandline = [self._java_executable_path] \
-                              + java_args_for_memory(int(self._config.wrapper['java-args']['optimize-for-memory-mibs'])) \
-                              + ['-jar', installer_name, '--installServer']
+                if not os.path.exists(installer_path):
+                    raise MinecraftServerWrapperException(f'Failed to download installer jar: File {installer_path} does not exist.')
+                commandline = self._java_executable_path \
+                              + ' ' + ' '.join( java_args_for_memory(int(self._config.wrapper['java-args']['optimize-for-memory-mibs'])) ) \
+                              + ' -jar ' + installer_name + ' --installServer'
                 logger.info('Installing forge with the following command line:')
-                for arg in commandline:
-                    logger.info('    {:s}'.format(arg))
-                self._minecraft = Process(
-                    commandline=commandline,
-                    working_dir=self._working_dir,
-                    stdout_callback=self.handle_minecraft_server_output,
-                    stderr_callback=self.handle_minecraft_server_stderr,
-                    exit_callback=self.handle_minecraft_server_stop,
-                )
+                logger.info('    {:s}'.format(commandline))
+                oldpath = os.getcwd()
+                os.chdir( self._working_dir )
+                r = os.system( commandline )
+                os.chdir( oldpath )
+                if r != 0:
+                    raise MinecraftServerWrapperException(f'Failed to run installer (returned non-zero exit code: {r}).')
+
             # Check if download was successful
             if not os.path.exists(self._current_jar_path):
                 raise MinecraftServerWrapperException(f'Failed to download launcher jar: File {self._current_jar_path} does not exist.')
