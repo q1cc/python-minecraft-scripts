@@ -173,14 +173,15 @@ class MinecraftServerWrapper:
 
     def download_launcher(self):
         minecraft_version = self._config['minecraft']['version']
+        type = self._config['minecraft']['type']
         fabric = self._config['minecraft']['fabric']
         forge = self._config['minecraft']['forge']
-        if fabric is not None:
+        if type == 'fabric':
             fabric_loader_version = fabric['loader-version']
             fabric_launcher_version = fabric['launcher-version']
             if self._current_jar_path is None:
                 self._current_jar_path = self._working_dir + '/' + fabric_server_jar_name(minecraft_version, fabric_loader_version, fabric_launcher_version)
-        elif forge is not None:
+        elif type == 'forge':
             forge_version = forge['version']
             if self._current_jar_path is None:
                 self._current_jar_path = self._working_dir + '/' + forge_server_jar_name(minecraft_version, forge_version)
@@ -190,13 +191,13 @@ class MinecraftServerWrapper:
         if os.path.exists(self._current_jar_path):
             logger.info('Launcher jar already exists, skipping download.')
         else:
-            if fabric is not None:
-                logger.info('Downloading forge launcher jar...')
+            if type == 'fabric':
+                logger.info('Downloading fabric launcher jar...')
                 download_url = fabric_server_url(minecraft_version, fabric_loader_version, fabric_launcher_version)
                 r = os.system(f'wget -O "{self._current_jar_path}" "{download_url}"')
                 if r != 0:
                     raise MinecraftServerWrapperException(f'Failed to download launcher jar (wget returned non-zero exit code: {r}).')
-            elif forge is not None:
+            elif type == 'forge':
                 logger.info('Downloading forge installer jar...')
                 download_url = forge_server_installer_url(minecraft_version, forge_version)
                 installer_name = forge_server_installer_name(minecraft_version, forge_version)
